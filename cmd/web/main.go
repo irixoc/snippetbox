@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 )
 
 // home handler
@@ -12,11 +15,11 @@ import (
 func home(w http.ResponseWriter, r *http.Request) {
 	// Check if the current request URL path exactly matches "/". If it doesn't, use
 	// the http.NotFound() function to send a 404 response to the client.
-	// Importantly, we then return from the handler. If we don't return the handler
-	// would keep executing and also write the "Hello from SnippetBox" message.
 	// This ensures paths with trailing slashes (/contact/) don't get directed to the home page
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
+		// IMPORTANT: we must return from the handler. If we don't return, the handler
+		// would keep executing and also write the "Hello from SnippetBox" message.
 		return
 	}
 
@@ -24,7 +27,20 @@ func home(w http.ResponseWriter, r *http.Request) {
 }
 
 func showSnippet(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("showing you a snippet"))
+
+	// Extract the value of the id parameter from the query string and try to
+	// convert it to an integer using the strconv.Atoi() function. If it can't
+	// be converted to an integer, or the value is less than 1, we return a 404 page
+	// not found response.
+	id, err := strconv.Atoi(r.URL.Query().Get("id"))
+	if err != nil || id < 1 {
+		http.NotFound(w, r)
+		return
+	}
+	fmt.Println(formatRequest(r))
+	// Use the fmt.Fprintf() function to interpolate the id value with our response
+	// and write it to the http.ResponseWriter.
+	fmt.Fprintf(w, "Displaying snippet with id: %d", id)
 }
 
 func createSnippet(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +65,7 @@ func createSnippet(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// http.NewServeMux() function initializes a new servemux
+	// http.NewServeMux() function initializes a new servemux (or router)
 	mux := http.NewServeMux()
 
 	// register the home function as the handler for the "/" URL pattern.
@@ -57,7 +73,7 @@ func main() {
 
 	mux.HandleFunc("/snippet", showSnippet)
 
-	mux.HandleFunc("/snippet/create", createSnippet)
+	mux.HandleFunc("/snippet/create/", createSnippet)
 
 	// Use the http.ListenAndServe() function to start a new web server.
 	// We pass in two parameters:
@@ -69,4 +85,31 @@ func main() {
 	// we use the log.Fatal() function to log the error message and exit. Note
 	// that any error returned by http.ListenAndServe() is always non-nil.
 	log.Fatal(err)
+}
+
+// formatRequest generates ascii representation of a request
+func formatRequest(r *http.Request) string {
+	// Create return string
+	var request []string
+	// Add the request string
+	url := fmt.Sprintf("%v %v %v", r.Method, r.URL, r.Proto)
+	request = append(request, url)
+	// Add the host
+	request = append(request, fmt.Sprintf("Host: %v", r.Host))
+	// Loop through headers
+	for name, headers := range r.Header {
+		name = strings.ToLower(name)
+		for _, h := range headers {
+			request = append(request, fmt.Sprintf("%v: %v", name, h))
+		}
+	}
+
+	// If this is a POST, add post data
+	if r.Method == "POST" {
+		r.ParseForm()
+		request = append(request, "\n")
+		request = append(request, r.Form.Encode())
+	}
+	// Return the request as a string
+	return strings.Join(request, "\n")
 }
